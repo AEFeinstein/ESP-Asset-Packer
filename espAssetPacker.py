@@ -5,8 +5,15 @@ from PIL import Image
 
 class BinaryAsset:
     def __init__(self, name, bytes):
+        # Save the name and data
         self.name = name
         self.bytes = bytes
+        # Save the actual data length
+        self.packedLen = len(bytes)
+        # Pad the data out to a 32 bit boundary, save that len too
+        while(len(self.bytes) % 4 != 0):
+            self.bytes.append(0)
+        self.paddedLen = len(bytes)
 
 
 def isPixelBlack(pix):
@@ -74,10 +81,6 @@ def processPng(dir, file):
     if(0 != byteLen):
         byteBeingBuilt = byteBeingBuilt << (8-byteLen)
         bytes.append(byteBeingBuilt)
-
-    # Then pad bytes out to a 32 bit boundary
-    while(len(bytes) % 4 != 0):
-        bytes.append(0)
 
     # Return an asset of these bytes
     return BinaryAsset(file, bytes)
@@ -174,13 +177,13 @@ def main():
         totalBytes.append((address >> 0) & 0xFF)
 
         # Write the size to the index
-        totalBytes.append((len(asset.bytes) >> 24) & 0xFF)
-        totalBytes.append((len(asset.bytes) >> 16) & 0xFF)
-        totalBytes.append((len(asset.bytes) >> 8) & 0xFF)
-        totalBytes.append((len(asset.bytes) >> 0) & 0xFF)
+        totalBytes.append((asset.packedLen >> 24) & 0xFF)
+        totalBytes.append((asset.packedLen >> 16) & 0xFF)
+        totalBytes.append((asset.packedLen >> 8) & 0xFF)
+        totalBytes.append((asset.packedLen >> 0) & 0xFF)
 
         # Move the address
-        address = address + len(asset.bytes)
+        address = address + asset.paddedLen
 
     # Write the assets after the index
     for asset in binaryAssetList:
