@@ -54,29 +54,28 @@ def processPng(dir, file):
     append32bits(bytes, img.height)
 
     # Iterate throught the image, packing each pixel into a bit
-    byteBeingBuilt = 0
+    bitsBeingBuilt = 0
     bitIdx = 0
     for x in range(img.height):
         for y in range(img.width):
 
             if(not isPixelBlack(pixels[y, x])):
-                byteBeingBuilt = byteBeingBuilt | (1 << (7-bitIdx))
+                bitsBeingBuilt = bitsBeingBuilt | (1 << (31-bitIdx))
 
-            # Check if this byte is finished
+            # Check if this 32-bit val is finished
             bitIdx = bitIdx + 1
-            if(8 == bitIdx):
+            if(32 == bitIdx):
                 # If it is, append it to the output
-                bytes.append(byteBeingBuilt)
-                byteBeingBuilt = 0
+                append32bits(bytes, bitsBeingBuilt)
+                bitsBeingBuilt = 0
                 bitIdx = 0
+
+    # If there is still a 32-bit val being built, append it
+    if(0 != bitIdx):
+        append32bits(bytes, bitsBeingBuilt)
 
     # Iterating done, close the image
     img.close()
-
-    # If there is still a byte being built, shift it over and append it
-    if(0 != bitIdx):
-        byteBeingBuilt = byteBeingBuilt << (8-bitIdx)
-        bytes.append(byteBeingBuilt)
 
     # Return an asset of these bytes
     return BinaryAsset(file, bytes)
