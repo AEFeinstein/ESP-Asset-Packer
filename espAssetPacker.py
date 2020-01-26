@@ -16,6 +16,13 @@ class BinaryAsset:
         self.paddedLen = len(bytes)
 
 
+def append32bits(bytes, val):
+    bytes.append((val >> 0) & 0xFF)
+    bytes.append((val >> 8) & 0xFF)
+    bytes.append((val >> 16) & 0xFF)
+    bytes.append((val >> 24) & 0xFF)
+
+
 def isPixelBlack(pix):
     sumChannel = 0
     for channel in pix:
@@ -42,15 +49,9 @@ def processPng(dir, file):
     bytes = bytearray()
 
     # Append a 32 bit width
-    bytes.append((img.width >> 24) & 0xFF)
-    bytes.append((img.width >> 16) & 0xFF)
-    bytes.append((img.width >> 8) & 0xFF)
-    bytes.append((img.width >> 0) & 0xFF)
+    append32bits(bytes, img.width)
     # Append a 32 bit height
-    bytes.append((img.height >> 24) & 0xFF)
-    bytes.append((img.height >> 16) & 0xFF)
-    bytes.append((img.height >> 8) & 0xFF)
-    bytes.append((img.height >> 0) & 0xFF)
+    append32bits(bytes, img.height)
 
     # Iterate throught the image, packing each pixel into a bit
     byteBeingBuilt = 0
@@ -152,10 +153,7 @@ def main():
 
     # Write the number of items in the index
     totalBytes = bytearray()
-    totalBytes.append((len(binaryAssetList) >> 24) & 0xFF)
-    totalBytes.append((len(binaryAssetList) >> 16) & 0xFF)
-    totalBytes.append((len(binaryAssetList) >> 8) & 0xFF)
-    totalBytes.append((len(binaryAssetList) >> 0) & 0xFF)
+    append32bits(totalBytes, len(binaryAssetList))
 
     # For each asset
     for asset in binaryAssetList:
@@ -166,16 +164,10 @@ def main():
             totalBytes.append(0)
 
         # Write the address to the index
-        totalBytes.append((address >> 24) & 0xFF)
-        totalBytes.append((address >> 16) & 0xFF)
-        totalBytes.append((address >> 8) & 0xFF)
-        totalBytes.append((address >> 0) & 0xFF)
+        append32bits(totalBytes, address)
 
         # Write the size to the index
-        totalBytes.append((asset.packedLen >> 24) & 0xFF)
-        totalBytes.append((asset.packedLen >> 16) & 0xFF)
-        totalBytes.append((asset.packedLen >> 8) & 0xFF)
-        totalBytes.append((asset.packedLen >> 0) & 0xFF)
+        append32bits(totalBytes, asset.packedLen)
 
         # Move the address
         address = address + asset.paddedLen
