@@ -20,9 +20,6 @@ def processRtttl(dir, file):
 
     bytes = bytearray()
 
-    # First value is 'shouldLoop' The song should not loop
-    append32bits(bytes, 0)
-
     # Second value is the number of notes
     append32bits(bytes, len(song.get("notes")))
 
