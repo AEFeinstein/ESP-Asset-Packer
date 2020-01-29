@@ -1,153 +1,13 @@
 import os
+import sys
 import argparse
-from PIL import Image
-from rtttl import parse_rtttl
 
+from espAssetPackerUtils import *
 
-class BinaryAsset:
-    def __init__(self, name, bytes):
-        # Save the name and data
-        self.name = name
-        self.bytes = bytes
-        # Save the actual data length
-        self.packedLen = len(bytes)
-        # Pad the data out to a 32 bit boundary, save that len too
-        while(len(self.bytes) % 4 != 0):
-            self.bytes.append(0)
-        self.paddedLen = len(bytes)
-
-
-def append32bits(bytes, val):
-    bytes.append((val >> 0) & 0xFF)
-    bytes.append((val >> 8) & 0xFF)
-    bytes.append((val >> 16) & 0xFF)
-    bytes.append((val >> 24) & 0xFF)
-
-
-def isPixelBlack(pix):
-    sumChannel = 0
-    for channel in pix:
-        sumChannel = sumChannel + channel
-    sumChannel = sumChannel / len(pix)
-    return (sumChannel < 128)
-
-
-def processPng(dir, file):
-    """This function converts a png file into 1-bit image bytes
-
-    Arguments:
-        dir {[type]} -- [description]
-        file {[type]} -- [description]
-
-    Returns:
-        [type] -- [description]
-    """
-    # Load the image
-    img = Image.open(dir + "/" + file).convert("RGB")
-    pixels = img.load()
-
-    # Create a bytearray
-    bytes = bytearray()
-
-    # Append a 32 bit width
-    append32bits(bytes, img.width)
-    # Append a 32 bit height
-    append32bits(bytes, img.height)
-
-    # Iterate throught the image, packing each pixel into a bit
-    bitsBeingBuilt = 0
-    bitIdx = 0
-    for x in range(img.height):
-        for y in range(img.width):
-
-            if(not isPixelBlack(pixels[y, x])):
-                bitsBeingBuilt = bitsBeingBuilt | (1 << (31-bitIdx))
-
-            # Check if this 32-bit val is finished
-            bitIdx = bitIdx + 1
-            if(32 == bitIdx):
-                # If it is, append it to the output
-                append32bits(bytes, bitsBeingBuilt)
-                bitsBeingBuilt = 0
-                bitIdx = 0
-
-    # If there is still a 32-bit val being built, append it
-    if(0 != bitIdx):
-        append32bits(bytes, bitsBeingBuilt)
-
-    # Iterating done, close the image
-    img.close()
-
-    # Return an asset of these bytes
-    return BinaryAsset(file, bytes)
-
-
-def processRtttl(dir, file):
-    """TODO
-
-    Arguments:
-        dir {[type]} -- [description]
-        file {[type]} -- [description]
-
-    Returns:
-        [type] -- [description]
-    """
-    # Read the file as a string
-    with open(dir + "/" + file, 'r') as fOpen:
-        data = fOpen.read().replace('\n', '')
-    # Parse the RTTTL
-    song = parse_rtttl(data)
-
-    bytes = bytearray()
-    # First value is 'shouldLoop' The song should not loop
-    append32bits(bytes, 0)
-    # Append the number of notes
-    append32bits(bytes, len(song.get("notes")))
-
-    # For each note
-    for note in song.get("notes"):
-        # Append duration
-        append32bits(bytes, round(note.get("duration")))
-        # Append frequency
-        frequency = note.get("frequency")
-        if(0 == frequency):
-            # This is a rest
-            append32bits(bytes, 0)
-        else:
-            # Convert to ESP clock divisor
-            append32bits(bytes, round(5000000 / (2 * frequency)))
-
-    # Return the new asset
-    return BinaryAsset(file, bytes)
-
-
-def processGif(dir, file):
-    """TODO
-
-    Arguments:
-        dir {[type]} -- [description]
-        file {[type]} -- [description]
-
-    Returns:
-        [type] -- [description]
-    """
-    return BinaryAsset(file)
-
-
-def processFile(dir, file):
-    """This function reads a file into bytes, nothing special
-
-    Arguments:
-        dir {[type]} -- [description]
-        file {[type]} -- [description]
-
-    Returns:
-        [type] -- [description]
-    """
-    fIn = open(dir + "/" + file, "rb")
-    asset = BinaryAsset(file, fIn.read())
-    fIn.close()
-    return asset
+from pngPacker import processPng
+from rtttlPacker import processRtttl
+from gifPacker import processGif
+from filePacker import processFile
 
 
 def main():
@@ -165,14 +25,20 @@ def main():
     # Read all the assets into RAM
     binaryAssetList = []
     for file in os.listdir(args.directory):
+        # Make sure the filename isn't too long for the index
+        # (16 bytes, incl. null terminator)
+        if(len(file) > 15):
+            raise Exception('Filename too long (' + file + ')')
+
+        # Pack the file according to it's extension
         if file.endswith(".png"):
             binaryAssetList.append(processPng(args.directory, file))
         elif file.endswith(".rtl"):
             binaryAssetList.append(processRtttl(args.directory, file))
         elif file.endswith(".gif"):
-            binaryAssetList.append(processGif(file))
+            binaryAssetList.append(processGif(args.directory, file))
         else:
-            binaryAssetList.append(processFile(file))
+            binaryAssetList.append(processFile(args.directory, file))
 
     # Figure out the size of the index
     address = 4 + (len(binaryAssetList) * (16 + 4 + 4))
@@ -211,4 +77,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+        sys.exit(0)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(-1)
