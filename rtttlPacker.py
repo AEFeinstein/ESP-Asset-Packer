@@ -19,23 +19,41 @@ def processRtttl(dir, file):
     song = parse_rtttl(data)
 
     bytes = bytearray()
+
     # First value is 'shouldLoop' The song should not loop
     append32bits(bytes, 0)
-    # Append the number of notes
+
+    # Second value is the number of notes
     append32bits(bytes, len(song.get("notes")))
+
+    # Third value is the inter-note pause in ms
+    append32bits(bytes, 5)
 
     # For each note
     for note in song.get("notes"):
-        # Append duration
-        append32bits(bytes, round(note.get("duration")))
-        # Append frequency
+
+        # Get and check the duration
+        durationMs = round(note.get("duration"))
+        if(durationMs > 65535):
+            raise Exception('RTTTL Duration in ' + file +
+                            ' is too long, ' + str(note))
+
+        # Get and check the frequency, convert to clock divisor
         frequency = note.get("frequency")
         if(0 == frequency):
             # This is a rest
-            append32bits(bytes, 0)
+            clockDivisor = 0
         else:
             # Convert to ESP clock divisor
-            append32bits(bytes, round(5000000 / (2 * frequency)))
+            clockDivisor = round(5000000 / (2 * frequency))
+            if(clockDivisor > 65535):
+                raise Exception('RTTTL note in ' + file +
+                                ' is too low, ' + str(note))
+
+        # Pack the frequency and duration into a single 32 bit value
+        combinedNote = (durationMs << 16) | clockDivisor
+        # Write that value to the bytes
+        append32bits(bytes, combinedNote)
 
     # Return the new asset
     return BinaryAsset(file, bytes)
