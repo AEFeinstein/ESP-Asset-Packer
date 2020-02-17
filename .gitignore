@@ -131,3 +131,4 @@ dmypy.json
 # Personal assets
 assets/
 assets.bin
+cLzCompressor/cLzCompressor
