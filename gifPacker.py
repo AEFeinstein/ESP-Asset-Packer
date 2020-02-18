@@ -55,18 +55,20 @@ def lzCompressBytes(bytes):
     outFile.write(bytes)
     outFile.close()
 
+    lzcFolder = os.path.dirname(os.path.realpath(__file__)) + "/cLzCompressor"
+    lzcFile = lzcFolder + "/cLzCompressor"
+    if not os.path.exists(lzcFile):
+        os.system("make -C " + lzcFolder)
+
     # Pass the temporary file to cLzCompressor
     returned_value = subprocess.check_output(
-        ["./cLzCompressor/cLzCompressor", tmpFileName])
+        [lzcFile, tmpFileName])
     # print('returned value:', returned_value)
 
     # Parse the stdout from cLzCompressor
     compressedBytes = bytearray()
     for bValStr in returned_value.split():
         compressedBytes.append(int(bValStr, base=16))
-
-    print("Compressed " + str(len(bytes)) +
-          " into " + str(len(compressedBytes)))
 
     # Delete the temporary file
     os.remove(tmpFileName)
@@ -108,10 +110,19 @@ def processGif(dir, file):
             append32bits(bytes, duration)
 
             # write the first frame
-            bytes.extend(lzCompressBytes(currentFrame))
+            compressedBytes = lzCompressBytes(currentFrame)
+            append32bits(bytes, len(compressedBytes))
+            bytes.extend(compressedBytes)
+            while(len(bytes) % 4 != 0):
+                bytes.append(0)
         else:
             # Just write the difference
-            bytes.extend(lzCompressBytes(diffFrame(prevFrame, currentFrame)))
+            compressedBytes = lzCompressBytes(
+                diffFrame(prevFrame, currentFrame))
+            append32bits(bytes, len(compressedBytes))
+            bytes.extend(compressedBytes)
+            while(len(bytes) % 4 != 0):
+                bytes.append(0)
 
         prevFrame = currentFrame
 
