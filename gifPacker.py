@@ -2,6 +2,7 @@ import subprocess
 import os
 from espAssetPackerUtils import *
 from PIL import Image, ImageSequence
+from sys import platform as _platform
 
 
 def isBlackPixel(pix):
@@ -56,7 +57,11 @@ def lzCompressBytes(bytes):
     outFile.close()
 
     lzcFolder = os.path.dirname(os.path.realpath(__file__)) + "/cLzCompressor"
-    lzcFile = lzcFolder + "/cLzCompressor"
+    if _platform == "linux" or _platform == "linux2":
+        lzcFile = lzcFolder + "/cLzCompressor"
+    elif _platform == "win32" or _platform == "win64":
+        lzcFile = lzcFolder + "/cLzCompressor.exe"
+
     if not os.path.exists(lzcFile):
         os.system("make -C " + lzcFolder)
 

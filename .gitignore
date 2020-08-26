@@ -132,3 +132,4 @@ dmypy.json
 assets/
 assets.bin
 cLzCompressor/cLzCompressor
+cLzCompressor/cLzCompressor.exe
