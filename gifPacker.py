@@ -59,7 +59,7 @@ def lzCompressBytes(bytes):
     lzcFolder = os.path.dirname(os.path.realpath(__file__)) + "/cLzCompressor"
     if _platform == "linux" or _platform == "linux2":
         lzcFile = lzcFolder + "/cLzCompressor"
-    elif _platform == "win32" or _platform == "win64":
+    elif _platform == "win32" or _platform == "win64" or _platform == "cygwin":
         lzcFile = lzcFolder + "/cLzCompressor.exe"
 
     if not os.path.exists(lzcFile):
