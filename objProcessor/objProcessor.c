@@ -9,7 +9,7 @@
 
 //Used for vertex welding.
 #define EPSILON  1
-#define FIXEDSCALE 24
+#define FIXEDSCALE 48
 
 #define MAXV (1048576)
 #define MAXI (1048576*3)
@@ -298,7 +298,7 @@ int main( int argc, char ** argv )
 			//Else, otherwise claimed.
 		}
 	}
-	fprintf( stderr, "Groups: %d\n", groupno );
+	fprintf( stderr, "Groups: %d (%d/%d)\n", groupno, ticount, licount );
 
 	//Recommended we leave this on as it validates the grouping code.
 	{
@@ -354,6 +354,7 @@ int main( int argc, char ** argv )
 	Write16u( groupno );
 
 
+	if( lineify )
 	{
 		int outverts = 0;
 		int outtris = 0;
@@ -364,13 +365,12 @@ int main( int argc, char ** argv )
 			int j;
 			int lvindex = 0;
 			memset( tempv, 0, sizeof( tempv ) );
-			for( j = 0; j < ticount; j += 3 )
+			for( j = 0; j < licount; j += 2 )
 			{
-				if( tispartof[j] == g ) 
+				if( lispartof[j] == g ) 
 				{
 					tempv[tindexset[j+0]] = 1;
 					tempv[tindexset[j+1]] = 1;
-					tempv[tindexset[j+2]] = 1;
 				}
 			}
 			int minx = 32767;
@@ -422,6 +422,125 @@ int main( int argc, char ** argv )
 			}
 
 			int faces = 0;
+			for( j = 0; j < licount; j += 2 )
+			{
+				if( lispartof[j] == g )
+					faces++;
+			}
+
+			int stride = 2;
+			Write16u( lvindex*stride ); //# of vertx ints count
+			Write16u( faces );
+			Write16u( 2 ); //3 = triangles. NOTE: MSB is 0 or version.
+			Write16s( centerx );
+			Write16s( centery );
+			Write16s( centerz );
+			Write16u( radius );
+
+			fprintf( stderr, "Group %d: %d/%d  (%d,%d,%d) %d\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius );
+
+			uint16_t storebuffer[lvindex*3+faces*3];
+			int storebufferid = 0;
+
+
+			for( j = 0; j < ticount; j += 3 )
+			{
+				if( lispartof[j] == g )
+				{
+					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+0]]*stride );
+					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+1]]*stride );
+					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+2]]*stride );
+					outtris ++;
+				}
+			}
+
+			for( j = 0; j < vcount; j++ )
+			{
+				if( tempv[j] )
+				{
+					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+0]) );
+					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+1]) );
+					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+2]) );
+					outverts++;
+				}
+			}
+
+			//Consider: Decompress the descriptors in RAM, and then decompress the needed models, as-needed.
+			//uint8_t * compoutput = alloca(lvindex*4+faces*4+66);
+			//int comp = fastlz_compress_level( 2, storebuffer, storebufferid * 2, compoutput);
+			//comptotal += comp;
+		}
+		fprintf( stderr, "Emitted %d groups, %d indices, %d vertices\n", groupno, outtris, outverts );
+	}
+	else
+	{
+		int outverts = 0;
+		int outtris = 0;
+		int comptotal __attribute__((unused)) = 0;
+		int g;
+		for( g = 1; g <= groupno; g++ )
+		{
+			int j;
+			int lvindex = 0;
+			memset( tempv, 0, sizeof( tempv ) );
+			for( j = 0; j < ticount; j += 3 )
+			{
+				if( tispartof[j] == g ) 
+				{
+					tempv[tindexset[j+0]] = 1;
+					tempv[tindexset[j+1]] = 1;
+					tempv[tindexset[j+2]] = 1;
+				}
+			}
+			int minx = 32767;
+			int miny = 32767;
+			int minz = 32767;
+			int maxx = -32768;
+			int maxy = -32768;
+			int maxz = -32768;
+			for( j = 0; j < vcount; j++ )
+			{
+				if( tempv[j] )
+				{
+					int x = vertices[j*3+0];
+					int y = vertices[j*3+1];
+					int z = vertices[j*3+2];
+					if( x < minx ) minx = x;
+					if( y < miny ) miny = y;
+					if( z < minz ) minz = z;
+					if( x > maxx ) maxx = x;
+					if( y > maxy ) maxy = y;
+					if( z > maxz ) maxz = z;
+					temp[j] = lvindex++;
+				}
+			}
+			if( minx < absminx ) absminx = minx;
+			if( miny < absminy ) absminy = miny;
+			if( minz < absminz ) absminz = minz;
+			if( maxx > absmaxx ) absmaxx = maxx;
+			if( maxy > absmaxy ) absmaxy = maxy;
+			if( maxz > absmaxz ) absmaxz = maxz;
+
+			int centerx = (maxx+minx)/2;
+			int centery = (maxy+miny)/2;
+			int centerz = (maxz+minz)/2;
+			int radius = 0;
+			for( j = 0; j < vcount; j++ )
+			{
+				if( tempv[j] )
+				{
+					int x = vertices[j*3+0];
+					int y = vertices[j*3+1];
+					int z = vertices[j*3+2];
+					int dx = x - centerx;
+					int dy = y - centery;
+					int dz = z - centerz;
+					int r = sqrt( (dx * dx + dy * dy + dz * dz) );
+					if( r > radius ) radius = r;
+				}
+			}
+
+			int faces = 0;
 			for( j = 0; j < ticount; j += 3 )
 			{
 				if( tispartof[j] == g )
@@ -437,7 +556,6 @@ int main( int argc, char ** argv )
 			Write16s( centerz );
 			Write16u( radius );
 
-			fprintf( stderr, "Group %d: %d/%d  (%d,%d,%d) %d\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius );
 
 			uint16_t storebuffer[lvindex*3+faces*3];
 			int storebufferid = 0;
@@ -458,12 +576,15 @@ int main( int argc, char ** argv )
 			{
 				if( tempv[j] )
 				{
-					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+0]*FIXEDSCALE) );
-					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+1]*FIXEDSCALE) );
-					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+2]*FIXEDSCALE) );
+					fprintf( stderr, "%d,%d,%d\n", (int)vertices[j*3+0], (int)vertices[j*3+1], (int)vertices[j*3+2] );
+					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+0]) );
+					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+1]) );
+					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+2]) );
 					outverts++;
 				}
 			}
+
+			fprintf( stderr, "Group %d: %d/%d  (%d,%d,%d) %d\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius );
 
 			//Consider: Decompress the descriptors in RAM, and then decompress the needed models, as-needed.
 			//uint8_t * compoutput = alloca(lvindex*4+faces*4+66);
