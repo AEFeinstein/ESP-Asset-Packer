@@ -5,6 +5,7 @@ import argparse
 from espAssetPackerUtils import *
 
 from pngPacker import processPng
+from objPacker import processObj
 from rtttlPacker import processRtttl
 from gifPacker import processGif
 from filePacker import processFile
@@ -33,6 +34,8 @@ def main():
         # Pack the file according to it's extension
         if file.endswith(".png"):
             binaryAssetList.append(processPng(args.directory, file))
+        elif file.endswith(".obj"):
+            binaryAssetList.append(processObj(args.directory, file))
         elif file.endswith(".rtl"):
             binaryAssetList.append(processRtttl(args.directory, file))
         elif file.endswith(".gif"):
