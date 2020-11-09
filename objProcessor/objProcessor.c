@@ -133,6 +133,8 @@ int main( int argc, char ** argv )
 	int lineno = 0;
 	char * currento __attribute__((unused)) = 0;
 
+	int groupno = 0;
+
 	while( ( sl = splits[lineno++] ) )
 	{
 		switch( sl[0] )
@@ -140,12 +142,32 @@ int main( int argc, char ** argv )
 		case 'o':
 			if( sl[1] )
 				currento = sl + 2;
+			groupno++;
 			break;
 			//if( strstr( currento, "lines" ) )
 			//	lineify = 1;
 			//else
 			//	lineify = 0;
 			//break;
+		case 'l':
+			if( 1 )
+			{
+
+				int l1, l2;
+				int lc = sscanf( sl+1, "%d %d", &l1, &l2 );
+				if( lc == 2 )
+				{
+					lispartof[licount] = groupno;
+					lindexset[licount++] = l1-1; if( licount >= MAXI ) goto overflow;
+					lispartof[licount] = groupno;
+					lindexset[licount++] = l2-1; if( licount >= MAXI ) goto overflow;
+				}
+				else
+				{
+					fprintf( stderr, "Error on line %d: Invalid # of line coordinates\n", lineno );
+				}
+			}
+			break;
 		case 'f':
 			//"f 3082/3795/934 3080/3796/934 3081/3797/934 3083/3798/934"
 			{
@@ -159,12 +181,15 @@ int main( int argc, char ** argv )
 					tfaces[i] = atoi( fs )-1;
 				}
 
+				//Overrides verts, turns into lines.
 				if( lineify )
 				{
 					int segs = ct;
 					for( i = 0; i < segs; i++ )
 					{
+						lispartof[licount] = groupno;
 						lindexset[licount++] = tfaces[i]; if( licount >= MAXI ) goto overflow;
+						lispartof[licount] = groupno;
 						lindexset[licount++] = tfaces[(i+1)%segs]; if( licount >= MAXI ) goto overflow;
 					}
 				}
@@ -174,8 +199,11 @@ int main( int argc, char ** argv )
 					int tris = ct - 2;
 					for( i = 0; i < tris; i++ )
 					{
+						tispartof[ticount] = groupno;
 						tindexset[ticount++] = tfaces[0]; if( ticount >= MAXI ) goto overflow;
+						tispartof[ticount] = groupno;
 						tindexset[ticount++] = tfaces[(i+1)%ct]; if( ticount >= MAXI ) goto overflow;
+						tispartof[ticount] = groupno;
 						tindexset[ticount++] = tfaces[(i+2)%ct]; if( ticount >= MAXI ) goto overflow;
 					}
 				}
@@ -205,100 +233,114 @@ int main( int argc, char ** argv )
 	}
 	fprintf( stderr, "Loaded %d tri indices and %d line indices with %d vertices\n", ticount, licount, vcount );
 
-	//Step 1: Merge common vertices.
-	if( 1 )
+	//If we want to ignore existing groups and math it all ourselves.
+	int advanced_process = 1;
+	if( advanced_process )
 	{
-		int mergedct = 0;
+		//This process only supports triangles.
+		memset( tispartof, 0, sizeof(tispartof) );
+		memset( lispartof, 0, sizeof(lispartof) );
 
-		uint8_t * vnixed = alloca( vcount );
-
-		for( i = 0; i < vcount; i++ )
+		//Step 1: Merge common vertices.
+		if( 1 )
 		{
-			int j;
-			int16_t * vm = &vertices[i*3];
-			if( vnixed[i] ) continue;
-			for( j = i+1;j < vcount; j++ )
-			{
-				int16_t * vt = &vertices[j*3];
-				if( vnixed[j] ) continue;
+			int mergedct = 0;
 
-				int16_t vdist = VertexDist( vm, vt );
-				if( vdist <= EPSILON )
+			uint8_t * vnixed = alloca( vcount );
+
+			for( i = 0; i < vcount; i++ )
+			{
+				int j;
+				int16_t * vm = &vertices[i*3];
+				if( vnixed[i] ) continue;
+				for( j = i+1;j < vcount; j++ )
 				{
-					//Weld these vertices.
-					fprintf( stderr, "Merging %d<%d %d %d> with %d<%d %d %d> dist: %d\n", i, vm[0], vm[1], vm[2], j, vt[0], vt[1], vt[2], vdist );
-					vnixed[j] = 1;
-					int k;
-					for( k = 0; k < ticount; k++ )
-						if( tindexset[k] == j ) tindexset[k] = i;
-					for( k = 0; k < licount; k++ )
-						if( lindexset[k] == j ) lindexset[k] = i;
-					mergedct++;
+					int16_t * vt = &vertices[j*3];
+					if( vnixed[j] ) continue;
+
+					int16_t vdist = VertexDist( vm, vt );
+					if( vdist <= EPSILON )
+					{
+						//Weld these vertices.
+						fprintf( stderr, "Merging %d<%d %d %d> with %d<%d %d %d> dist: %d\n", i, vm[0], vm[1], vm[2], j, vt[0], vt[1], vt[2], vdist );
+						vnixed[j] = 1;
+						int k;
+						for( k = 0; k < ticount; k++ )
+							if( tindexset[k] == j ) tindexset[k] = i;
+						for( k = 0; k < licount; k++ )
+							if( lindexset[k] == j ) lindexset[k] = i;
+						mergedct++;
+					}
 				}
 			}
+			fprintf( stderr, "Merged %d vertices\n", mergedct );
 		}
-		fprintf( stderr, "Merged %d vertices\n", mergedct );
-	}
 
-	//for( i = 0; i < ticount; i++ )
-	//	printf( "%d ", tindexset[i] );
-
-	//Step 2: Nix unused vertices.
-	if( 1 ) {
-		int nixedct = 0;
-		for( i = 0; i < vcount; i++ )
-		{
-			int uses = 0;
-			int k;
-			for( k = 0; k < ticount; k++ )
-				if( tindexset[k] == i ) uses++;
-			for( k = 0; k < licount; k++ )
-				if( lindexset[k] == i ) uses++;
-			if( uses ) continue;
-
-			fprintf( stderr, "Vertex: %d <%d %d %d> nixing\n", i+nixedct, vertices[i*3+0], vertices[i*3+1], vertices[i*3+2] );
-
-			int j;
-			for( j = i; j < vcount; j++ )
+		//for( i = 0; i < ticount; i++ )
+		//	printf( "%d ", tindexset[i] );
+		//Step 2: Nix unused vertices.
+		if( 1 ) {
+			int nixedct = 0;
+			for( i = 0; i < vcount; i++ )
 			{
-				vertices[j*3+0] = vertices[j*3+3];
-				vertices[j*3+1] = vertices[j*3+4];
-				vertices[j*3+2] = vertices[j*3+5];
-			}
-			for( k = 0; k < ticount; k++ )
-				if( tindexset[k] >= i ) tindexset[k]--;
-			for( k = 0; k < licount; k++ )
-				if( lindexset[k] >= i ) lindexset[k]--;
-			nixedct++;
-			vcount--;
-			i--;
-		}
-		fprintf( stderr, "Nixed %d vertices\n", nixedct );
-	}
+				int uses = 0;
+				int k;
+				for( k = 0; k < ticount; k++ )
+					if( tindexset[k] == i ) uses++;
+				for( k = 0; k < licount; k++ )
+					if( lindexset[k] == i ) uses++;
+				if( uses ) continue;
 
-	int groupno = 0;
-	//Groupify pieces.
+				fprintf( stderr, "Vertex: %d <%d %d %d> nixing\n", i+nixedct, vertices[i*3+0], vertices[i*3+1], vertices[i*3+2] );
+
+				int j;
+				for( j = i; j < vcount; j++ )
+				{
+					vertices[j*3+0] = vertices[j*3+3];
+					vertices[j*3+1] = vertices[j*3+4];
+					vertices[j*3+2] = vertices[j*3+5];
+				}
+				for( k = 0; k < ticount; k++ )
+					if( tindexset[k] >= i ) tindexset[k]--;
+				for( k = 0; k < licount; k++ )
+					if( lindexset[k] >= i ) lindexset[k]--;
+				nixedct++;
+				vcount--;
+				i--;
+			}
+			fprintf( stderr, "Nixed %d vertices\n", nixedct );
+		}
+
+		groupno = 0;
+		//Groupify pieces.
+		if( 1 )
+		{
+			for( i = 0; i < ticount; i+=3 )
+			{
+				if( tispartof[i] == 0 )
+				{
+					groupno++;
+					GrowGroup( i, 3, groupno, 0 );
+				}
+				//Else, otherwise claimed.
+			}
+			for( i = 0; i < licount; i++ )
+			{
+				if( lispartof[i] == 0 )
+				{
+					groupno++;
+					GrowGroup( i, 2, groupno, 0 );
+				}
+				//Else, otherwise claimed.
+			}
+		}
+		fprintf( stderr, "Groups: %d (%d/%d)\n", groupno, ticount, licount );
+	}
+	else
 	{
-		for( i = 0; i < ticount; i+=3 )
-		{
-			if( tispartof[i] == 0 )
-			{
-				groupno++;
-				GrowGroup( i, 3, groupno, 0 );
-			}
-			//Else, otherwise claimed.
-		}
-		for( i = 0; i < licount; i+=2 )
-		{
-			if( tispartof[i] == 0 )
-			{
-				groupno++;
-				GrowGroup( i, 2, groupno, 0 );
-			}
-			//Else, otherwise claimed.
-		}
+		//*not* advanced_process
 	}
-	fprintf( stderr, "Groups: %d (%d/%d)\n", groupno, ticount, licount );
+
 
 	//Recommended we leave this on as it validates the grouping code.
 	{
@@ -319,6 +361,16 @@ int main( int argc, char ** argv )
 					tempv[tindexset[j+2]] = 1;
 				}
 			}
+
+			for( j = 0; j < licount; j += 2 )
+			{
+				if( lispartof[j] == i ) 
+				{
+					tempv[lindexset[j+0]] = 1;
+					tempv[lindexset[j+1]] = 1;
+				}
+			}
+
 			for( j = 0; j < vcount; j++ )
 			{
 				if( tempv[j] )
@@ -327,11 +379,22 @@ int main( int argc, char ** argv )
 					fprintf( f, "v %f %f %f\n", vertices[j*3+0]/((float)FIXEDSCALE), vertices[j*3+1]/((float)FIXEDSCALE), vertices[j*3+2]/((float)FIXEDSCALE) );
 				}
 			}
+			for( j = 0; j < licount; j += 2 )
+			{
+				if( lispartof[j] != lispartof[j+1] )
+				{
+					fprintf( stderr, "ERROR: GROUPING CODE JANKY LINE\n" );
+				}
+				if( lispartof[j] == i )
+				{
+					fprintf( f, "l %d %d\n", temp[lindexset[j+0]], temp[lindexset[j+1]] );
+				}
+			}
 			for( j = 0; j < ticount; j += 3 )
 			{
 				if( tispartof[j] != tispartof[j+1] || tispartof[j] != tispartof[j+2] )
 				{
-					fprintf( stderr, "ERROR: GROUPING CODE JANKY\n" );
+					fprintf( stderr, "ERROR: GROUPING CODE JANKYTRIANGLES [%d@%d %d %d]\n", j, tispartof[j+0],tispartof[j+1],tispartof[j+2] );
 				}
 				if( tispartof[j] == i )
 				{
@@ -443,13 +506,12 @@ int main( int argc, char ** argv )
 			int storebufferid = 0;
 
 
-			for( j = 0; j < ticount; j += 3 )
+			for( j = 0; j < ticount; j += 2 )
 			{
 				if( lispartof[j] == g )
 				{
 					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+0]]*stride );
 					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+1]]*stride );
-					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+2]]*stride );
 					outtris ++;
 				}
 			}
@@ -476,14 +538,16 @@ int main( int argc, char ** argv )
 	{
 		int outverts = 0;
 		int outtris = 0;
+		int outlines = 0;
 		int comptotal __attribute__((unused)) = 0;
 		int g;
 		for( g = 1; g <= groupno; g++ )
 		{
 			int j;
 			int lvindex = 0;
+
 			memset( tempv, 0, sizeof( tempv ) );
-			for( j = 0; j < ticount; j += 3 )
+			for( j = 0; j < ticount; j +=3 )
 			{
 				if( tispartof[j] == g ) 
 				{
@@ -492,6 +556,17 @@ int main( int argc, char ** argv )
 					tempv[tindexset[j+2]] = 1;
 				}
 			}
+
+
+			for( j = 0; j < licount; j +=2 )
+			{
+				if( lispartof[j] == g )
+				{
+					tempv[lindexset[j+0]] = 2;
+					tempv[lindexset[j+1]] = 2;
+				}
+			}
+
 			int minx = 32767;
 			int miny = 32767;
 			int minz = 32767;
@@ -500,7 +575,7 @@ int main( int argc, char ** argv )
 			int maxz = -32768;
 			for( j = 0; j < vcount; j++ )
 			{
-				if( tempv[j] )
+				if( tempv[j] == 1 )
 				{
 					int x = vertices[j*3+0];
 					int y = vertices[j*3+1];
@@ -511,6 +586,25 @@ int main( int argc, char ** argv )
 					if( x > maxx ) maxx = x;
 					if( y > maxy ) maxy = y;
 					if( z > maxz ) maxz = z;
+					//fprintf( stderr, "Triangle: %d %d\n", j, lvindex );
+					temp[j] = lvindex++;
+				}
+			}
+
+			for( j = 0; j < vcount; j++ )
+			{
+				if( tempv[j] == 2 )
+				{
+					int x = vertices[j*3+0];
+					int y = vertices[j*3+1];
+					int z = vertices[j*3+2];
+					if( x < minx ) minx = x;
+					if( y < miny ) miny = y;
+					if( z < minz ) minz = z;
+					if( x > maxx ) maxx = x;
+					if( y > maxy ) maxy = y;
+					if( z > maxz ) maxz = z;
+					//fprintf( stderr, "Line: %d %d\n", j, lvindex );
 					temp[j] = lvindex++;
 				}
 			}
@@ -547,51 +641,106 @@ int main( int argc, char ** argv )
 					faces++;
 			}
 
-			int stride = 3;
-			Write16u( lvindex*stride ); //# of vertx ints count
-			Write16u( faces );
-			Write16u( 3 ); //3 = triangles. NOTE: MSB is 0 or version.
-			Write16s( centerx );
-			Write16s( centery );
-			Write16s( centerz );
-			Write16u( radius );
-
-
-			uint16_t storebuffer[lvindex*3+faces*3];
-			int storebufferid = 0;
-
-
-			for( j = 0; j < ticount; j += 3 )
+			int lines = 0;
+			for( j = 0; j < licount; j += 2 )
 			{
-				if( tispartof[j] == g )
-				{
-					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+0]]*stride );
-					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+1]]*stride );
-					Write16u( storebuffer[storebufferid++] = temp[tindexset[j+2]]*stride );
-					outtris ++;
-				}
+				if( lispartof[j] == g )
+					lines++;
 			}
 
-			for( j = 0; j < vcount; j++ )
+			if( faces )
 			{
-				if( tempv[j] )
+//				int stride = 3;
+				Write16u( lvindex*3 ); //# of vertx ints count
+				Write16u( faces );
+				Write16u( 3 ); //3 = triangles. NOTE: MSB is 0 or version.
+				Write16s( centerx );
+				Write16s( centery );
+				Write16s( centerz );
+				Write16u( radius );
+
+
+				uint16_t storebuffer[lvindex*3+faces*3];
+				int storebufferid = 0;
+
+
+				for( j = 0; j < ticount; j += 3 )
 				{
-					fprintf( stderr, "%d,%d,%d\n", (int)vertices[j*3+0], (int)vertices[j*3+1], (int)vertices[j*3+2] );
-					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+0]) );
-					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+1]) );
-					Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+2]) );
-					outverts++;
+					if( tispartof[j] == g )
+					{
+						Write16u( storebuffer[storebufferid++] = temp[tindexset[j+0]]*3 );
+						Write16u( storebuffer[storebufferid++] = temp[tindexset[j+1]]*3 );
+						Write16u( storebuffer[storebufferid++] = temp[tindexset[j+2]]*3 );
+						outtris ++;
+					}
 				}
+
+				for( j = 0; j < vcount; j++ )
+				{
+					if( tempv[j] )
+					{
+						//fprintf( stderr, "%d,%d,%d\n", (int)vertices[j*3+0], (int)vertices[j*3+1], (int)vertices[j*3+2] );
+						Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+0]) );
+						Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+1]) );
+						Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+2]) );
+						outverts++;
+					}
+				}
+				//fprintf( stderr, "Group T %d: %d/%d  (%d,%d,%d) %d\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius );
 			}
 
-			fprintf( stderr, "Group %d: %d/%d  (%d,%d,%d) %d\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius );
+			if( lines )
+			{
+//				int stride = 2;
+				Write16u( lvindex*3 ); //# of vertx ints count
+				Write16u( lines );
+				Write16u( 2 ); //3 = triangles. NOTE: MSB is 0 or version.
+				Write16s( centerx );
+				Write16s( centery );
+				Write16s( centerz );
+				Write16u( radius );
+
+
+				uint16_t storebuffer[lvindex*3+lines*2];
+				int storebufferid = 0;
+
+				int thislines = 0;
+				int thisvs = 0;
+
+				for( j = 0; j < licount; j += 2 )
+				{
+					if( lispartof[j] == g )
+					{
+						//fprintf( stderr, "%d,%d -> %d,%d\n", lindexset[j+0], lindexset[j+1], temp[lindexset[j+0]]*3, temp[lindexset[j+1]]*3 );
+						Write16u( storebuffer[storebufferid++] = temp[lindexset[j+0]]*3 );
+						Write16u( storebuffer[storebufferid++] = temp[lindexset[j+1]]*3 );
+						outlines ++;
+						thislines++;
+					}
+				}
+
+				for( j = 0; j < vcount; j++ )
+				{
+					if( tempv[j] )
+					{
+						//fprintf( stderr, "%d,%d,%d\n", (int)vertices[j*3+0], (int)vertices[j*3+1], (int)vertices[j*3+2] );
+						Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+0]) );
+						Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+1]) );
+						Write16s( (int)(storebuffer[storebufferid++] = vertices[j*3+2]) );
+						outverts++;
+						thisvs++;
+					}
+				}
+				//fprintf( stderr, "Group L %d: %d/%d  (%d,%d,%d) %d (%d-%d) (%d-%d)\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius, lines, thislines, lvindex, thisvs );
+			}
+
 
 			//Consider: Decompress the descriptors in RAM, and then decompress the needed models, as-needed.
 			//uint8_t * compoutput = alloca(lvindex*4+faces*4+66);
 			//int comp = fastlz_compress_level( 2, storebuffer, storebufferid * 2, compoutput);
 			//comptotal += comp;
 		}
-		fprintf( stderr, "Emitted %d groups, %d indices, %d vertices\n", groupno, outtris, outverts );
+		fprintf( stderr, "Emitted %d groups, %d indices, %d lines, %d vertices\n", groupno, outtris, outlines, outverts );
 	}
 
 	fprintf( stderr, "Overall extents: [%d-%d] [%d-%d] [%d-%d]\n",
