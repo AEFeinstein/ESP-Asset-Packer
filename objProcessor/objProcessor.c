@@ -668,7 +668,7 @@ int main( int argc, char ** argv )
 				Write16s( centerz );
 				Write16u( radius );
 				Write16u( grouptags[g] );
-				fprintf( stderr, "T--->%d -> %d -> %d\n", g, radius, grouptags[g] );
+			//	fprintf( stderr, "T--->%d -> %d -> %d\n", g, radius, grouptags[g] );
 
 
 				uint16_t storebuffer[lvindex*3+faces*3];
@@ -710,7 +710,7 @@ int main( int argc, char ** argv )
 				Write16s( centerz );
 				Write16u( radius );
 				Write16u( grouptags[g] );
-				fprintf( stderr, "L--->%d -> %d -> %d\n", g, radius, grouptags[g] );
+			//	fprintf( stderr, "L--->%d -> %d -> %d\n", g, radius, grouptags[g] );
 
 				uint16_t storebuffer[lvindex*3+lines*2];
 				int storebufferid = 0;
