@@ -132,7 +132,7 @@ int main( int argc, char ** argv )
 	char * sl;
 	int lineno = 0;
 	char * currento __attribute__((unused)) = 0;
-
+	int * grouptags = malloc( sizeof(int)*2 );
 	int groupno = 0;
 
 	while( ( sl = splits[lineno++] ) )
@@ -143,6 +143,14 @@ int main( int argc, char ** argv )
 			if( sl[1] )
 				currento = sl + 2;
 			groupno++;
+			grouptags = realloc( grouptags, (groupno+1)*sizeof(int) );
+			grouptags[groupno] = 0;
+			char * st = strstr( sl+1, "LABEL" );
+			if( st )
+			{
+				grouptags[groupno] = atoi( st + 5 );
+			}
+			fprintf( stderr, "GROUP: %s %p %d\n", sl+1, st, grouptags[groupno] );
 			break;
 			//if( strstr( currento, "lines" ) )
 			//	lineify = 1;
@@ -234,7 +242,7 @@ int main( int argc, char ** argv )
 	fprintf( stderr, "Loaded %d tri indices and %d line indices with %d vertices\n", ticount, licount, vcount );
 
 	//If we want to ignore existing groups and math it all ourselves.
-	int advanced_process = 1;
+	int advanced_process = 0;
 	if( advanced_process )
 	{
 		//This process only supports triangles.
@@ -349,7 +357,7 @@ int main( int argc, char ** argv )
 		FILE * f = fopen( "ProcOBJ.obj", "wb" );
 		for( i = 1; i < groupno; i++ )
 		{
-			fprintf( f, "o Group%d\n", i );
+			fprintf( f, "o Group%d {%d}\n", i, grouptags[i] );
 			int j;
 			memset( tempv, 0, sizeof( tempv ) );
 			for( j = 0; j < ticount; j += 3 )
@@ -499,6 +507,7 @@ int main( int argc, char ** argv )
 			Write16s( centery );
 			Write16s( centerz );
 			Write16u( radius );
+			Write16u( grouptags[g] );
 
 			fprintf( stderr, "Group %d: %d/%d  (%d,%d,%d) %d\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius );
 
@@ -648,7 +657,7 @@ int main( int argc, char ** argv )
 					lines++;
 			}
 
-			if( faces )
+			if( faces > lines )
 			{
 //				int stride = 3;
 				Write16u( lvindex*3 ); //# of vertx ints count
@@ -658,6 +667,8 @@ int main( int argc, char ** argv )
 				Write16s( centery );
 				Write16s( centerz );
 				Write16u( radius );
+				Write16u( grouptags[g] );
+				fprintf( stderr, "T--->%d -> %d -> %d\n", g, radius, grouptags[g] );
 
 
 				uint16_t storebuffer[lvindex*3+faces*3];
@@ -688,8 +699,7 @@ int main( int argc, char ** argv )
 				}
 				//fprintf( stderr, "Group T %d: %d/%d  (%d,%d,%d) %d\n", g-1, lvindex*stride, faces, centerx, centery, centerz, radius );
 			}
-
-			if( lines )
+			else
 			{
 //				int stride = 2;
 				Write16u( lvindex*3 ); //# of vertx ints count
@@ -699,7 +709,8 @@ int main( int argc, char ** argv )
 				Write16s( centery );
 				Write16s( centerz );
 				Write16u( radius );
-
+				Write16u( grouptags[g] );
+				fprintf( stderr, "L--->%d -> %d -> %d\n", g, radius, grouptags[g] );
 
 				uint16_t storebuffer[lvindex*3+lines*2];
 				int storebufferid = 0;
